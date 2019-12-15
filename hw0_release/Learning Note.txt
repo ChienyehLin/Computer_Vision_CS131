@@ -1,0 +1,15 @@
+Learning Note:
+Basic Operations of Numpy is important. Please referes to this page: https://www.pluralsight.com/guides/overview-basic-numpy-operations
+                                                
+
+Image[:,:][2]!=Image[:,:,2] because Image[:,:] == Image, and Image[:,:][2] means 300 RGB values in the 3rd row.
+
+LAB:
+    afert transofrmation, we should display LAB in RGB channel: the method is as follows
+    理论上说，L*、a*、b*都是实数，不过实际一般限定在一个整数范围内： 
+    - L*越大，亮度越高。L*为0时代表黑色，为100时代表白色。 
+    - a*和b*为0时都代表灰色。 
+    - a*从负数变到正数，对应颜色从绿色变到红色。 
+    - b*从负数变到正数，对应颜色从蓝色变到黄色。 
+    - 我们在实际应用中常常将颜色通道的范围-100~+100或-128~127之间。
+

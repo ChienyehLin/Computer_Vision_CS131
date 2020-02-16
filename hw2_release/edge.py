@@ -36,7 +36,9 @@ def conv(image, kernel):
     padded = np.pad(image, pad_width, mode='edge')
 
     ### YOUR CODE HERE
-    pass
+    for y in range(Hi):
+        for x in range(Wi):
+            out[y,x]=np.dot(padded[y:y+Hk,x:x+Wk].reshape(1,-1),kernel.reshape(-1,1))
     ### END YOUR CODE
 
     return out
@@ -62,6 +64,10 @@ def gaussian_kernel(size, sigma):
 
     ### YOUR CODE HERE
     pass
+    k=(size-1)/2.0
+    for y in range(size):
+        for x in range(size):
+            kernel[x,y]=1/(2.0*np.pi*sigma**2)*np.exp(((x-k)**2+(y-k)**2)/(-2*sigma**2))
     ### END YOUR CODE
 
     return kernel
@@ -81,9 +87,9 @@ def partial_x(img):
     out = None
 
     ### YOUR CODE HERE
-    pass
+    kernel=np.array([[-1,0,1]])/2
+    out =    conv(img, kernel)
     ### END YOUR CODE
-
     return out
 
 def partial_y(img):
@@ -101,7 +107,8 @@ def partial_y(img):
     out = None
 
     ### YOUR CODE HERE
-    pass
+    kernel=np.array([[-1],[0],[1]])/2
+    out =    conv(img, kernel)
     ### END YOUR CODE
 
     return out
@@ -125,7 +132,11 @@ def gradient(img):
     theta = np.zeros(img.shape)
 
     ### YOUR CODE HERE
-    pass
+    Gx=partial_x(img)
+    Gy=partial_y(img)
+    G=np.sqrt(Gx**2+Gy**2)
+    theta=(np.arctan(Gy/(Gx+0.000000000001))/np.pi*180)%360
+
     ### END YOUR CODE
 
     return G, theta
@@ -151,10 +162,55 @@ def non_maximum_suppression(G, theta):
     theta = np.floor((theta + 22.5) / 45) * 45
 
     ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    direction={0:(0,1),
+               45:(1,1),
+               90:(1,0),
+               135:(1,-1),
+               180:(0,-1),
+               225:(-1,-1),
+               270:(-1,0),
+               315:(-1,1),
+               360:(0,1)
+              }
 
+   
+
+    for y in range(H-1):
+        for x in range(W):
+            y_neigh= y+direction[theta[y,x]][0]
+            x_neigh= x+direction[theta[y,x]][1]
+            y_neigh_prev=y-direction[theta[y,x]][0]
+            x_neigh_prev=x-direction[theta[y,x]][1]
+            
+            
+            alpha = np.deg2rad(theta[y, x])
+            # note here the angle is measured clockwisely
+            # i.e. if theta=90 degree the direction is south.
+            p1=int(np.round(np.sin(alpha)))
+            p2=int(np.round(np.cos(alpha)))
+            #if(direction[theta[y,x]][0]!=p1 or direction[theta[y,x]][1]!=p2):
+            #print(p1,direction[theta[y,x]][0],direction[theta[y,x]][1],p2,theta[y,x])
+            if(y_neigh<0 or x_neigh<0):
+                G_neigh =0
+            elif(y_neigh>=H or x_neigh>=W):
+                G_neigh =0
+            else:
+                 G_neigh = G[y_neigh,x_neigh]
+            if(y_neigh_prev<0 or x_neigh_prev<0):
+                G_neigh_prev =0
+            elif(y_neigh_prev>=H or x_neigh_prev>=W):
+                G_neigh_prev =0
+            else:
+                G_neigh_prev = G[y_neigh_prev,x_neigh_prev]
+
+            if not (G[y, x] >= G_neigh_prev and G[y, x] >= G_neigh):
+                out[y, x] = 0
+            else:
+                out[y, x] = G[y, x]
+              
+    ### END YOUR CODE
     return out
+
 
 def double_thresholding(img, high, low):
     """
@@ -176,7 +232,10 @@ def double_thresholding(img, high, low):
     weak_edges = np.zeros(img.shape, dtype=np.bool)
 
     ### YOUR CODE HERE
-    pass
+    H=img.shape[0]
+    W=img.shape[1]
+    strong_edges=  img>high
+    weak_edges = (img < high) & (img > low)
     ### END YOUR CODE
 
     return strong_edges, weak_edges
@@ -228,14 +287,34 @@ def link_edges(strong_edges, weak_edges):
     H, W = strong_edges.shape
     indices = np.stack(np.nonzero(strong_edges)).T
     edges = np.zeros((H, W), dtype=np.bool)
-
+    
     # Make new instances of arguments to leave the original
     # references intact
     weak_edges = np.copy(weak_edges)
     edges = np.copy(strong_edges)
 
     ### YOUR CODE HERE
-    pass
+    BFS_list=[]
+    #1st iteration to get the weak_eadges connected to strong_edges
+    for index in indices:
+        neighbors=get_neighbors(index[0], index[1], H, W)
+        for n_y,n_x in neighbors:
+            if(weak_edges[n_y,n_x]==True):
+                edges[n_y,n_x]=True      #make the weak_edge a strong_edge
+                weak_edges[n_y,n_x]=False #delete correspending weak_edge
+                BFS_list.append([n_y,n_x])
+                
+    #run BFS until no weak_edges connected to strong edges           
+    while(len(BFS_list)>0):
+        for index in BFS_list:
+            neighbors=get_neighbors(index[0], index[1], H, W)
+            for n_y,n_x in neighbors:
+                if(weak_edges[n_y,n_x]==True):
+                    edges[n_y,n_x]=True
+                    weak_edges[n_y,n_x]=False
+                    BFS_list.append([n_y,n_x])
+            BFS_list.remove(index)
+    #BFS
     ### END YOUR CODE
 
     return edges
@@ -253,6 +332,12 @@ def canny(img, kernel_size=5, sigma=1.4, high=20, low=15):
         edge: numpy array of shape(H, W).
     """
     ### YOUR CODE HERE
+    kernel=gaussian_kernel(kernel_size, sigma)
+    sobel=conv(img, kernel)
+    G,theta=gradient(sobel)
+    out=non_maximum_suppression(G,theta)
+    strong,weak=double_thresholding(out, high, low)
+    edge=link_edges(strong, weak)
     pass
     ### END YOUR CODE
 
@@ -275,7 +360,7 @@ def hough_transform(img):
         thetas: numpy array of shape (n, ).
     """
     # Set rho and theta ranges
-    W, H = img.shape
+    H, W = img.shape
     diag_len = int(np.ceil(np.sqrt(W * W + H * H)))
     rhos = np.linspace(-diag_len, diag_len, diag_len * 2.0 + 1)
     thetas = np.deg2rad(np.arange(-90.0, 90.0))
@@ -294,6 +379,12 @@ def hough_transform(img):
     # and increment the accumulator in the corresponding coordiate.
     ### YOUR CODE HERE
     pass
+    for y,x in zip(ys,xs):
+               for theta_index,theta in enumerate(thetas):
+                        rho=cos_t[theta_index]*x+sin_t[theta_index]*y
+                        rho_index=np.where(rhos==int(rho))
+                        accumulator[rho_index,theta_index]+=1
+    
     ### END YOUR CODE
 
     return accumulator, rhos, thetas
